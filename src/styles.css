@@ -116,3 +116,11 @@ button.danger {
 .add-btn {
   margin-top: 1rem;
 }
+
+.top-actions {
+  margin-bottom: 0.75rem;
+}
+
+button.secondary {
+  background: #334155;
+}

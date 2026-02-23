@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import seedRecords from './data/seedRecords.json';
 
 type Status = 'read' | 'wip' | 'unset' | 'expire';
 
@@ -21,6 +22,8 @@ const statusConfig: Record<Status, { label: string; color: string }> = {
   expire: { label: 'Expire', color: '#dc2626' }
 };
 
+const storageKey = 'tenant-usage-grid-records';
+
 const blankRecord = (): TenantRecord => ({
   id: crypto.randomUUID(),
   tenantId: '',
@@ -33,20 +36,35 @@ const blankRecord = (): TenantRecord => ({
   status: 'unset'
 });
 
-const storageKey = 'tenant-usage-grid-records';
+const normalizeSeedRecord = (record: TenantRecord): TenantRecord => ({
+  ...record,
+  status: statusConfig[record.status] ? record.status : 'unset'
+});
+
+const getSeedData = (): TenantRecord[] => {
+  if (!Array.isArray(seedRecords)) {
+    return [blankRecord()];
+  }
+
+  const mapped = seedRecords
+    .map((record) => normalizeSeedRecord(record as TenantRecord))
+    .filter((record) => record.id && record.tenantId);
+
+  return mapped.length > 0 ? mapped : [blankRecord()];
+};
 
 function App() {
   const [records, setRecords] = useState<TenantRecord[]>(() => {
     const raw = localStorage.getItem(storageKey);
     if (!raw) {
-      return [blankRecord()];
+      return getSeedData();
     }
 
     try {
       const parsed = JSON.parse(raw) as TenantRecord[];
-      return parsed.length > 0 ? parsed : [blankRecord()];
+      return parsed.length > 0 ? parsed : getSeedData();
     } catch {
-      return [blankRecord()];
+      return getSeedData();
     }
   });
 
@@ -67,6 +85,11 @@ function App() {
     save(next.length > 0 ? next : [blankRecord()]);
   };
 
+  const resetFromSeed = () => {
+    const defaults = getSeedData();
+    save(defaults);
+  };
+
   const statusOptions = useMemo(
     () => (Object.keys(statusConfig) as Status[]).map((status) => ({ status, ...statusConfig[status] })),
     []
@@ -76,6 +99,12 @@ function App() {
     <main className="page">
       <h1>Tenant Usage Tracker</h1>
       <p className="subtitle">Editable TypeScript UI for tenant / branch usage records.</p>
+
+      <div className="top-actions">
+        <button type="button" className="secondary" onClick={resetFromSeed}>
+          Reset to JSON seed data
+        </button>
+      </div>
 
       <div className="legend">
         {statusOptions.map((item) => (

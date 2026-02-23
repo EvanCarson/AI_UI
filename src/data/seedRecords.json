@@ -1,0 +1,35 @@
+[
+  {
+    "id": "seed-811-ny",
+    "tenantId": "811",
+    "branchName": "NYC Equities",
+    "usage": "Production",
+    "urlList": "https://oms-811.example.com\nhttps://gio-811.example.com",
+    "omsFirm": "OMS811A",
+    "gioFirm": "GIO811A",
+    "note": "Primary tenant for US equities.",
+    "status": "read"
+  },
+  {
+    "id": "seed-810-ln",
+    "tenantId": "810",
+    "branchName": "London FX",
+    "usage": "UAT",
+    "urlList": "https://uat-810.example.com",
+    "omsFirm": "OMS810UAT",
+    "gioFirm": "GIO810UAT",
+    "note": "Regression testing in progress.",
+    "status": "wip"
+  },
+  {
+    "id": "seed-915-sg",
+    "tenantId": "915",
+    "branchName": "Singapore Derivatives",
+    "usage": "Disaster Recovery",
+    "urlList": "https://dr-915.example.com",
+    "omsFirm": "OMS915DR",
+    "gioFirm": "GIO915DR",
+    "note": "Review quarterly failover drill dates.",
+    "status": "expire"
+  }
+]
