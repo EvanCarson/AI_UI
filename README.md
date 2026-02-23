@@ -13,6 +13,15 @@ A small deployable TypeScript UI that provides an editable grid for:
 
 ## Sample data (from JSON)
 
+
+## New UI capabilities
+
+- **Read mode / Edit mode** toggle for cleaner presentation vs data maintenance
+- **Action column hidden in read mode** and only shown in edit mode
+- **Rich URL textbox** in edit mode: add URLs as chips (comma/space/newline input)
+- **Column filters** for Tenant ID, Branch, Usage, and Status
+- **Group by** controls for Status, Usage, or Branch
+
 Default rows are loaded from `src/data/seedRecords.json` (including tenant IDs **811** and **810**).
 
 If you change data while testing, click **Reset to JSON seed data** in the UI to reload from the JSON file.
