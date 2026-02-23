@@ -4,12 +4,17 @@ import seedRecords from './data/seedRecords.json';
 type Status = 'read' | 'wip' | 'unset' | 'expire';
 type GroupBy = 'none' | 'status' | 'usage' | 'branchName';
 
+type UrlItem = {
+  tag: string;
+  url: string;
+};
+
 type TenantRecord = {
   id: string;
   tenantId: string;
   branchName: string;
   usage: string;
-  urlList: string[];
+  urlList: UrlItem[];
   omsFirm: string;
   gioFirm: string;
   note: string;
@@ -24,10 +29,10 @@ type Filters = {
 };
 
 const statusConfig: Record<Status, { label: string; color: string }> = {
-  read: { label: 'Read', color: '#16a34a' },
+  read: { label: 'Ready', color: '#16a34a' },
   wip: { label: 'WIP', color: '#f59e0b' },
-  unset: { label: 'Unset', color: '#64748b' },
-  expire: { label: 'Expire', color: '#dc2626' }
+  unset: { label: 'Not Started', color: '#64748b' },
+  expire: { label: 'Sunset', color: '#dc2626' }
 };
 
 const storageKey = 'tenant-usage-grid-records';
@@ -44,16 +49,38 @@ const blankRecord = (): TenantRecord => ({
   status: 'unset'
 });
 
-const parseUrlList = (input: unknown): string[] => {
-  if (Array.isArray(input)) {
-    return input.map((item) => String(item).trim()).filter(Boolean);
+const normalizeUrlItem = (value: unknown): UrlItem | null => {
+  if (typeof value === 'string') {
+    const v = value.trim();
+    if (!v) return null;
+    return { tag: 'Link', url: v };
   }
+
+  if (value && typeof value === 'object') {
+    const maybe = value as { tag?: unknown; url?: unknown };
+    const url = String(maybe.url ?? '').trim();
+    if (!url) return null;
+    const tag = String(maybe.tag ?? 'Link').trim() || 'Link';
+    return { tag, url };
+  }
+
+  return null;
+};
+
+const parseUrlList = (input: unknown): UrlItem[] => {
+  if (Array.isArray(input)) {
+    const mapped = input.map(normalizeUrlItem).filter((item): item is UrlItem => item !== null);
+    return mapped;
+  }
+
   if (typeof input === 'string') {
     return input
       .split(/[\n,\s]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+      .map((raw) => raw.trim())
+      .filter(Boolean)
+      .map((url) => ({ tag: 'Link', url }));
   }
+
   return [];
 };
 
@@ -89,54 +116,63 @@ const emptyFilters: Filters = {
 };
 
 type UrlEditorProps = {
-  urls: string[];
-  onChange: (value: string[]) => void;
+  urls: UrlItem[];
+  onChange: (value: UrlItem[]) => void;
 };
 
 function UrlRichInput({ urls, onChange }: UrlEditorProps) {
-  const [draft, setDraft] = useState('');
+  const [draftTag, setDraftTag] = useState('');
+  const [draftUrl, setDraftUrl] = useState('');
 
-  const addFromDraft = () => {
-    if (!draft.trim()) {
-      return;
+  const addDraft = () => {
+    const normalized = normalizeUrlItem({ tag: draftTag, url: draftUrl });
+    if (!normalized) return;
+
+    const exists = urls.some((item) => item.url === normalized.url && item.tag === normalized.tag);
+    if (!exists) {
+      onChange([...urls, normalized]);
     }
 
-    const values = draft
-      .split(/[\n,\s]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    const deduped = [...new Set([...urls, ...values])];
-    onChange(deduped);
-    setDraft('');
+    setDraftTag('');
+    setDraftUrl('');
   };
 
-  const removeUrl = (url: string) => {
-    onChange(urls.filter((item) => item !== url));
+  const removeAt = (index: number) => {
+    onChange(urls.filter((_, i) => i !== index));
+  };
+
+  const updateAt = (index: number, field: keyof UrlItem, value: string) => {
+    const next = urls.map((item, i) => (i === index ? { ...item, [field]: value } : item));
+    onChange(next);
   };
 
   return (
     <div className="url-editor">
-      <div className="url-tags">
-        {urls.map((url) => (
-          <span className="url-tag" key={url}>
-            {url}
-            <button type="button" onClick={() => removeUrl(url)} aria-label={`remove ${url}`}>
-              ×
-            </button>
-          </span>
-        ))}
+      {urls.map((item, index) => (
+        <div className="url-row" key={`${item.tag}-${item.url}-${index}`}>
+          <input
+            value={item.tag}
+            onChange={(event) => updateAt(index, 'tag', event.target.value)}
+            placeholder="Tag (e.g. Genesis)"
+          />
+          <input
+            value={item.url}
+            onChange={(event) => updateAt(index, 'url', event.target.value)}
+            placeholder="https://..."
+          />
+          <button type="button" className="danger small" onClick={() => removeAt(index)}>
+            Remove
+          </button>
+        </div>
+      ))}
+
+      <div className="url-row add-row">
+        <input value={draftTag} onChange={(event) => setDraftTag(event.target.value)} placeholder="Tag (Genesis, Airflow)" />
+        <input value={draftUrl} onChange={(event) => setDraftUrl(event.target.value)} placeholder="https://..." />
+        <button type="button" className="small" onClick={addDraft}>
+          Add
+        </button>
       </div>
-      <textarea
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        placeholder="Type URL(s), separate with comma, space, or newline"
-        rows={2}
-        onBlur={addFromDraft}
-      />
-      <button type="button" className="small" onClick={addFromDraft}>
-        Add URL
-      </button>
     </div>
   );
 }
@@ -148,9 +184,7 @@ function App() {
 
   const [records, setRecords] = useState<TenantRecord[]>(() => {
     const raw = localStorage.getItem(storageKey);
-    if (!raw) {
-      return getSeedData();
-    }
+    if (!raw) return getSeedData();
 
     try {
       const parsed = JSON.parse(raw) as Partial<TenantRecord>[];
@@ -166,19 +200,7 @@ function App() {
   };
 
   const updateField = <K extends keyof TenantRecord>(id: string, field: K, value: TenantRecord[K]) => {
-    const next = records.map((record) => (record.id === id ? { ...record, [field]: value } : record));
-    save(next);
-  };
-
-  const addRow = () => save([...records, blankRecord()]);
-
-  const removeRow = (id: string) => {
-    const next = records.filter((record) => record.id !== id);
-    save(next.length > 0 ? next : [blankRecord()]);
-  };
-
-  const resetFromSeed = () => {
-    save(getSeedData());
+    save(records.map((record) => (record.id === id ? { ...record, [field]: value } : record)));
   };
 
   const statusOptions = useMemo(
@@ -201,9 +223,7 @@ function App() {
   );
 
   const groupedRecords = useMemo(() => {
-    if (groupBy === 'none') {
-      return [{ key: 'All Records', rows: filteredRecords }];
-    }
+    if (groupBy === 'none') return [{ key: 'All Records', rows: filteredRecords }];
 
     const groups = new Map<string, TenantRecord[]>();
     filteredRecords.forEach((record) => {
@@ -216,7 +236,7 @@ function App() {
     return [...groups.entries()].map(([key, rows]) => ({ key, rows }));
   }, [filteredRecords, groupBy]);
 
-  const renderCell = (record: TenantRecord, field: keyof TenantRecord, placeholder: string) => {
+  const renderCell = (record: TenantRecord, field: Exclude<keyof TenantRecord, 'urlList' | 'status'>, placeholder: string) => {
     if (isEditMode) {
       return (
         <input
@@ -233,7 +253,7 @@ function App() {
   return (
     <main className="page">
       <h1>Tenant Usage Tracker</h1>
-      <p className="subtitle">Read mode for clean presentation, edit mode for updates.</p>
+      <p className="subtitle">Read mode for presentation, edit mode for updates.</p>
 
       <div className="toolbar">
         <button type="button" onClick={() => setIsEditMode((mode) => !mode)}>
@@ -241,50 +261,68 @@ function App() {
         </button>
         {isEditMode && (
           <>
-            <button type="button" className="secondary" onClick={addRow}>
+            <button type="button" className="secondary" onClick={() => save([...records, blankRecord()])}>
               + Add row
             </button>
-            <button type="button" className="secondary" onClick={resetFromSeed}>
+            <button type="button" className="secondary" onClick={() => save(getSeedData())}>
               Reset to JSON seed data
             </button>
           </>
         )}
       </div>
 
-      <div className="filters">
-        <input
-          placeholder="Filter Tenant ID"
-          value={filters.tenantId}
-          onChange={(event) => setFilters((prev) => ({ ...prev, tenantId: event.target.value }))}
-        />
-        <input
-          placeholder="Filter Branch"
-          value={filters.branchName}
-          onChange={(event) => setFilters((prev) => ({ ...prev, branchName: event.target.value }))}
-        />
-        <input
-          placeholder="Filter Usage"
-          value={filters.usage}
-          onChange={(event) => setFilters((prev) => ({ ...prev, usage: event.target.value }))}
-        />
-        <select
-          value={filters.status}
-          onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value as Filters['status'] }))}
-        >
-          <option value="all">All Status</option>
-          {statusOptions.map((item) => (
-            <option key={item.status} value={item.status}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <select value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
-          <option value="none">No Grouping</option>
-          <option value="status">Group by Status</option>
-          <option value="usage">Group by Usage</option>
-          <option value="branchName">Group by Branch</option>
-        </select>
-      </div>
+      <section className="filter-panel">
+        <h2>Filter & Group</h2>
+        <div className="filters grouped">
+          <div className="filter-item">
+            <label>Tenant ID</label>
+            <input
+              placeholder="e.g. 811"
+              value={filters.tenantId}
+              onChange={(event) => setFilters((prev) => ({ ...prev, tenantId: event.target.value }))}
+            />
+          </div>
+          <div className="filter-item">
+            <label>Branch</label>
+            <input
+              placeholder="e.g. London"
+              value={filters.branchName}
+              onChange={(event) => setFilters((prev) => ({ ...prev, branchName: event.target.value }))}
+            />
+          </div>
+          <div className="filter-item">
+            <label>Usage</label>
+            <input
+              placeholder="e.g. Production"
+              value={filters.usage}
+              onChange={(event) => setFilters((prev) => ({ ...prev, usage: event.target.value }))}
+            />
+          </div>
+          <div className="filter-item">
+            <label>Status</label>
+            <select
+              value={filters.status}
+              onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value as Filters['status'] }))}
+            >
+              <option value="all">All Status</option>
+              {statusOptions.map((item) => (
+                <option key={item.status} value={item.status}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="filter-item">
+            <label>Group by</label>
+            <select value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
+              <option value="none">No Grouping</option>
+              <option value="status">Status</option>
+              <option value="usage">Usage</option>
+              <option value="branchName">Branch</option>
+            </select>
+          </div>
+        </div>
+      </section>
 
       <div className="legend">
         {statusOptions.map((item) => (
@@ -314,7 +352,7 @@ function App() {
             {groupedRecords.map((group) => (
               <Fragment key={`group-wrap-${group.key}`}>
                 {groupBy !== 'none' && (
-                  <tr key={`group-${group.key}`} className="group-row">
+                  <tr className="group-row">
                     <td colSpan={isEditMode ? 9 : 8}>
                       {groupBy}: {group.key} ({group.rows.length})
                     </td>
@@ -354,9 +392,10 @@ function App() {
                       ) : (
                         <div className="url-read-list">
                           {record.urlList.length > 0 ? (
-                            record.urlList.map((url) => (
-                              <a key={url} href={url} target="_blank" rel="noreferrer">
-                                {url}
+                            record.urlList.map((item, index) => (
+                              <a key={`${item.url}-${index}`} href={item.url} target="_blank" rel="noreferrer" className="url-pill">
+                                <span className="url-tag-read">{item.tag}</span>
+                                <span className="url-text">{item.url}</span>
                               </a>
                             ))
                           ) : (
@@ -381,7 +420,7 @@ function App() {
                     </td>
                     {isEditMode && (
                       <td>
-                        <button type="button" className="danger" onClick={() => removeRow(record.id)}>
+                        <button type="button" className="danger" onClick={() => save(records.filter((r) => r.id !== record.id))}>
                           Delete
                         </button>
                       </td>

@@ -5,21 +5,20 @@ A small deployable TypeScript UI that provides an editable grid for:
 - Tenant ID
 - Branch Name
 - Usage
-- URL list
+- URL list (Tag + URL)
 - OMS Firm
 - GIO Firm
 - Note
-- Status with color icon (`Read`, `WIP`, `Unset`, `Expire`)
+- Status with color icon (`Ready`, `WIP`, `Not Started`, `Sunset`)
 
 ## Sample data (from JSON)
-
 
 ## New UI capabilities
 
 - **Read mode / Edit mode** toggle for cleaner presentation vs data maintenance
 - **Action column hidden in read mode** and only shown in edit mode
-- **Rich URL textbox** in edit mode: add URLs as chips (comma/space/newline input)
-- **Column filters** for Tenant ID, Branch, Usage, and Status
+- **Rich URL editor** in edit mode: each URL entry has **Tag** + **URL** (for example `Genesis`, `Airflow`)
+- **Column filters** grouped in a dedicated filter panel
 - **Group by** controls for Status, Usage, or Branch
 
 Default rows are loaded from `src/data/seedRecords.json` (including tenant IDs **811** and **810**).
